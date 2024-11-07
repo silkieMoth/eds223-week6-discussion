@@ -1,0 +1,114 @@
+---
+title: "false_color_images"
+format: html
+editor: visual
+---
+
+```{r}
+library(tidyverse)
+library(sf)
+library(terra)
+```
+
+# before fire
+```{r}
+# Set directory for folder
+pre_fire_dir <- here::here("data", "LC80340322016189-SC20170128091153")
+
+# Create a list of all images that have the extension .tif and contain the word band
+pre_fire_bands <- list.files(pre_fire_dir,
+                             pattern = glob2rx("*band*.tif$"),
+                             full.names = TRUE)
+# Create a raster stack
+pre_fire_rast <- rast(pre_fire_bands)
+
+# Read mask raster
+pre_mask <- rast(here::here("data", "LC80340322016189-SC20170128091153", "LC80340322016189LGN00_cfmask_crop.tif"))
+```
+
+# after file
+```{r}
+# Set directory for folder
+post_fire_dir <- here::here("data", "LC80340322016205-SC20170127160728")
+
+# Create a list of all images that have the extension .tif and contain the word band
+post_fire_bands <- list.files(post_fire_dir,
+                             pattern = glob2rx("*band*.tif$"),
+                             full.names = TRUE)
+# Create a raster stack
+post_fire_rast <- rast(post_fire_bands)
+
+# Read mask raster
+post_mask <- rast(here::here("data", "LC80340322016189-SC20170128091153", "LC80340322016189LGN00_cfmask_crop.tif"))
+```
+
+# NBR (normalized burn ratio) function
+```{r}
+nbr_fun <- function(nir, swir2){
+    (nir - swir2)/(nir + swir2)
+}
+```
+
+```{r}
+bands <- c('aerosol', 'blue', 'green', 'red', 'nir', 'swir1', 'swir2')
+names(pre_fire_rast) <- bands
+names(post_fire_rast) <- bands
+```
+
+```{r}
+pre_mask[pre_mask > 0] <- NA
+pre_fire_rast <- mask(pre_fire_rast, mask = pre_mask)
+post_mask[post_mask > 0] <- NA
+post_fire_rast <- mask(post_fire_rast, mask = post_mask)
+```
+
+```{r}
+plot(pre_fire_rast)
+plot(post_fire_rast)
+
+plot(pre_mask)
+plot(post_mask)
+```
+
+
+# True color
+```{r}
+plotRGB(pre_fire_rast, r = 4, g = 3, b = 2, stretch = 'lin', colNA = 'black')
+```
+
+# False color
+```{r}
+plotRGB(pre_fire_rast, r = 7, g = 5, b = 3, stretch = 'lin', colNA = 'black')
+```
+
+```{r}
+nbr_pre <- lapp(pre_fire_rast, nbr_fun, usenames = TRUE)
+plot(nbr_pre)
+```
+
+```{r}
+nbr_post <- lapp(post_fire_rast, nbr_fun, usenames = TRUE)
+plot(nbr_post)
+```
+
+```{r}
+nbr_diff <- nbr_pre - nbr_post
+plot(nbr_diff)
+```
+
+```{r}
+m <- matrix(c(-99999, -0.1, 1, # enhanced regrowth
+              -0.1, 0.1, 2, # unburned
+              0.1, 0.27, 3, # low severity
+              0.27, 0.66, 4, # moderate severity
+              0.66, 9999, 5), # high severity
+              ncol = 3,
+              byrow = TRUE)
+
+nbr_diff_classed <- classify(nbr_diff,
+         rcl = m)
+
+
+plot(nbr_diff_classed, type = 'classes', levels = c('enhanced regrowth', 'unburned', 'low severity', 'moderate severity', 'high severity'))
+```
+
